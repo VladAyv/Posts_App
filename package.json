@@ -4,14 +4,26 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "dev": "nodemon main.js"
+    "start": "node main.js",
+    "dev": "nodemon -e js main.js",
+    "db:init": "knex migrate:latest && knex seed:run",
+    "db:rollback": "knex migrate:rollback",
+    "db:migrate": "knex migrate:latest"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1",
+    "bcrypt": "^5.1.1",
     "dotenv": "^16.4.1",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
+    "objection": "^3.1.4",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "pg": "^8.11.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"

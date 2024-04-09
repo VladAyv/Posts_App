@@ -4,147 +4,133 @@ const {
   getPosts,
   updatePost,
   deletePost,
-  getPostsByLimit,
+  getPostById,
 } = require("../Controllers/postControllers.js");
-
 const {
-  postSchema,
+  postsSchema,
   patchSchema,
   validate,
 } = require("../Validations/postValidation.js");
-// const validationMiddleware = require("../Middleware/validation_mid.js");
+const createResponseObj = require("../utils/createResponseObj.js");
+const validate = require("../Validations");
+const passportConf = require("../config/passport.js");
+const { ROLE_NAME } = require("../constants/index.js");
+const checkRole = requestAnimationFrame("../middlewares");
 
 const router = express.Router();
 
 router
-  .get("/", (req, res) => {
+  .get("/", async (req, res) => {
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
-    let offset;
-    if (page && limit) {
-      offset = (page - 1) * limit;
+    const offset = (page - 1) * limit;
+
+    try {
+      const result = await getPosts(limit, offset);
+      const response = createResponseObj(
+        result.posts,
+        {
+          totalPosts: result.totalPostsCount,
+          currentPage: page,
+          limit,
+        },
+        200
+      );
+      res.status(200).send(response);
+    } catch (err) {
+      res.status(500).send({
+        message: "Something went wrong.",
+      });
     }
-    getPostsByLimit(offset, limit)
-      .then((posts) => {
-        res.status(200).send(posts);
-      })
-      .catch((err) => {
-        console.error("error", err);
-        res.status(500).send({
-          message: "Something went wrong",
-        });
-      });
   })
-  .get("/:id", (req, res) => {
+  .get("/:id", async (req, res) => {
     const id = req.params.id;
-    getPosts()
-      .then((receivedPosts) => {
-        const postIndex = receivedPosts.findIndex((el) => el.id == id);
-        if (postIndex === -1) {
-          res.status(404).send({
-            message: "Post not found",
-          });
-        } else {
-          res.status(200).send(receivedPosts[postIndex]);
-        }
-      })
-      .catch((err) => {
-        console.error("error", err);
-        res.status(500).send({
-          message: "Something went wrong",
-        });
-      });
+    try {
+      const currentPost = await getPostById(id);
+      if (!currentPost) {
+        return res
+          .status(404)
+          .send({ message: `Post with id ${id} not found` });
+      }
+      const response = createResponseObj(currentPost, {}, 200);
+      return res.status(200).send(response);
+    } catch (err) {
+      console.log(err);
+      return res.status(500).send(err);
+    }
   })
-  .post("/", validate(postSchema), (req, res) => {
-    createPost(req.body)
-      .then((createdPost) => {
-        res.status(201).send(createdPost);
-      })
-      .catch((err) => {
+  .post(
+    "/",
+    checkRole(ROLE_NAME.CREATOR),
+    validate(postsSchema),
+    async (req, res) => {
+      try {
+        const userId = req.user.id;
+        const newPost = await createPost(req.body, userId);
+        const response = createResponseObj(
+          newPost,
+          { message: "Post created successfully" },
+          201
+        );
+        res.status(201).send(response);
+      } catch (err) {
         console.error("error", err);
         res.status(500).send({ message: "Something went wrong" });
-      });
-  })
-  .put("/:id", validate(postSchema), (req, res) => {
-    const id = req.params.id;
-    const updatedPost = req.body;
-    getPosts()
-      .then((receivedPosts) => {
-        const postIndex = receivedPosts.findIndex((el) => el.id == id);
-        if (postIndex === -1) {
-          res.status(404).send({
-            message: "Post not found",
-          });
-        } else {
-          updatePost(
-            receivedPosts,
-            postIndex,
-            updatedPost,
-            (isPatch = "PATCH")
-          ).then((post) => {
-            console.log("post updated", post);
-            res.status(200).send(post);
-          });
-        }
-      })
-      .catch((err) => {
-        console.error("error", err);
-        res.status(500).send({
-          message: validation.error.message,
-        });
-      });
-  })
-  .delete("/:id", (req, res) => {
-    getPosts.then((receivedPosts) => {
-      const id = req.params.id;
-      const postIndex = receivedPosts.findIndex((el) => el.id == id);
-      if (postIndex === -1) {
-        res.status(404).send({
-          message: "Post not found",
-        });
-      } else {
-        deletePost(receivedPosts, postIndex)
-          .then(() => {
-            res.status(200).send({
-              message: `Post with id - ${id} successfully deleted`,
-            });
-          })
-          .catch((err) => {
-            console.error("error", err);
-            res.status(500).send({
-              message: "Something went wrong",
-            });
-          });
       }
-    });
-  })
-  .patch("/:id", validate(patchSchema), (req, res) => {
-    const id = req.params.id;
-    const updatedPost = req.body;
-    getPosts()
-      .then((receivedPosts) => {
-        const postIndex = receivedPosts.findIndex((el) => el.id == id);
-        if (postIndex === -1) {
-          res.status(404).send({
-            message: "Post not found",
-          });
-        } else {
-          updatePost(
-            receivedPosts,
-            postIndex,
-            updatedPost,
-            (isPatch = "PATCH")
-          ).then((post) => {
-            res.status(200).send(post);
-          });
+    }
+  )
+  .put(
+    "/:id",
+    checkRole(ROLE_NAME.CREATOR),
+    validate(patchSchema),
+    async (req, res) => {
+      const id = req.params.id;
+      if (id !== req.user.id) {
+        res
+          .status(400)
+          .send({ message: "You are not allowed to delete with that id" });
+      }
+      const data = req.body;
+      try {
+        const updatedPost = await updatePost(id, data);
+        if (!updatedPost) {
+          return res
+            .status(404)
+            .send({ message: `Post with id ${id} not found` });
         }
-      })
-      .catch((err) => {
+        const response = createResponseObj(
+          updatedPost,
+          { message: `Post with id ${id} updated successfully` },
+          200
+        );
+        return res.status(200).send(response);
+      } catch (err) {
         console.error("error", err);
-        res.status(500).send({
-          message: validation.error.message,
-        });
-      });
-  });
+        return res.status(500).send({ message: "Something went wrong" });
+      }
+    }
+  )
+  .delete(
+    "/:id",
+    checkRole(ROLE_NAME.CREATOR, ROLE_NAME.ADMIN, ROLE_NAME.SUPERADMIN),
+    async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await deletePost(id);
+        if (!result) {
+          return res.status(404).send({ message: "Post not found" });
+        }
+        const response = createResponseObj(
+          result,
+          { message: `Post with id ${id} deleted successfully` },
+          200
+        );
+        return res.status(200).send(response);
+      } catch (err) {
+        console.error("error", err);
+        return res.status(500).send({ message: "Something went wrong" });
+      }
+    }
+  );
 
 module.exports = router;

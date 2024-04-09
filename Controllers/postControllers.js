@@ -1,90 +1,72 @@
-const fs = require("fs");
-const { off } = require("process");
-const postsFilePath = "./posts.json";
+// const fs = require("fs");
+const Post = require("../models/postModel");
+// const postsFilePath = "./posts.json";
 
-const getPosts = () => {
-  let posts = [];
-  return new Promise((resolve, reject) => {
-    fs.readFile(postsFilePath, (err, data) => {
-      if (err) {
-        console.error(err.message);
-        reject(err);
-      }
+const getPostById = async (id) => {
+  try {
+    return await Post.query().findById(id);
+  } catch (err) {
+    throw new Error(err);
+  }
+};
 
-      posts = data.toString("utf8");
-      resolve(JSON.parse(posts));
-    });
-  });
+const getPosts = async (limit, offset) => {
+  try {
+    const posts = await Post.query().limit(limit).offset(offset);
+    // .withGraphFetched("user");
+
+    const totalPostsCount = await Post.query().resultSize();
+    return { posts, totalPostsCount };
+  } catch (err) {
+    throw new Error(err);
+  }
 };
 
 const getPostsByLimit = async (offset, limit) => {
-  console.log(offset, limit);
   try {
     const posts = await getPosts();
     return posts.splice(offset, limit);
   } catch (err) {
+    console.log(err);
     throw new Error(
       `Not able to get posts with offset ${offset} and limit ${limit}`
     );
   }
 };
-const createPost = (post) => {
-  return new Promise((resolve, reject) => {
-    getPosts().then((data) => {
-      const length = data.length;
-      let id;
-      if (!length) {
-        id = 1;
-      } else {
-        id = data[length - 1].id + 1;
-      }
-      post.id = id;
-      data.push(post);
-      fs.writeFile(postsFilePath, JSON.stringify(data), (err) => {
-        if (err) {
-          console.error(err.message);
-          reject(err);
-        }
-        resolve(post);
-      });
-    });
-  });
-};
 
-const updatePost = (currentPosts, index, newData, isPatch = false) => {
-  if (!isPatch) {
-    currentPosts[index] = { ...newData, id: currentPosts[index].id };
-  } else {
-    currentPosts[index] = { ...currentPosts[index], ...newData };
+const createPost = async (post, userId) => {
+  post.user_id = userId;
+  try {
+    const newPost = await Post.query().insert(post);
+    return newPost;
+  } catch (err) {
+    throw new Error(err);
   }
-  return new Promise((resolve, reject) => {
-    fs.writeFile(postsFilePath, JSON.stringify(currentPosts), (err) => {
-      if (err) {
-        console.error(err.message);
-        reject(err);
-      }
-      resolve(currentPosts[index]);
-    });
-  });
 };
 
-const deletePost = (receivedPosts, postIndex) => {
-  receivedPosts.splice(postIndex, 1);
-  return new Promise((resolve, reject) => {
-    fs.writeFile(postsFilePath, JSON.stringify(receivedPosts), (err) => {
-      if (err) {
-        console.error(err.message);
-        reject(err);
-      }
-      resolve();
-    });
-  });
+const updatePost = async (postId, data) => {
+  try {
+    const updatedPost = await Post.query().patchAndFetchById(postId, data);
+    return updatedPost;
+  } catch (err) {
+    throw new Error(err);
+  }
+};
+
+const deletePost = async (id) => {
+  try {
+    const res = await Post.query().deleteById(id);
+    return res;
+  } catch (err) {
+    throw new Error(err);
+  }
 };
 
 module.exports = {
   createPost,
   updatePost,
   getPosts,
+  getPostById,
   deletePost,
   getPostsByLimit,
 };
